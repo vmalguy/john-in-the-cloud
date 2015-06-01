@@ -17,6 +17,8 @@ from runabove.exception import APIError
 
 from ConfigParser import SafeConfigParser
 
+reload(sys)
+
 parser = SafeConfigParser()
 parser.read('settings.conf')
 env.key_filename = parser.get('ra','ssh_key_filename')
@@ -30,12 +32,12 @@ node_list = ""
 ips_master = ""
 env.connection_attempts = 5
 env.parallel = True
+instance_list=[]
 
 
 #fonction fabric pour installer john the ripper
 def install_pre():
-	with hide('output'):
-		run("date")
+	with hide('everything'):
 		#copy de la clef  pour que tous les host se parle entre eu
 		with open(os.path.expanduser(env.key_filename)) as f:
 	         key_text = f.read()
@@ -45,22 +47,19 @@ def install_pre():
 	         key_text = f.read()
 	    #bug : on devrait overight pas append
 		append('~/.ssh/id_rsa.pub', key_text)
+	with hide('output'):
 		run ("chmod 0600 ~/.ssh/*")
+		env.warn_only = True
 		run ("sudo apt-get update")
+		env.warn_only = False
 		run ("sudo apt-get install libopenmpi-dev openmpi-bin build-essential libssl-dev nfs-common -y")
 		env.warn_only = True
 		run ("sudo mkdir /var/mpishare 2> /dev/null ")
 		run ("sudo umount /var/mpishare 2> /dev/null")
 		env.warn_only = False
-		#run ("wget http://www.openwall.com/john/j/john-1.8.0-jumbo-1.tar.gz")
-		#put("john-1.8.0-jumbo-1.tar.gz", "john-1.8.0-jumbo-1.tar.gz")
-		#run ("tar xzvf john-1.8.0-jumbo-1.tar.gz")
-		#run ("cd john-1.8.0-jumbo-1/src/ ; ./configure --enable-mpi")
-		#run ("cd john-1.8.0-jumbo-1/src/ ; make clean && make -s")
-		#run ("mv john-1.8.0-jumbo-1 /usr/share/")
 		#recup le nombre de core et le mettre dans la mpi-host
 		#for host in nodelist
-		run ("sudo chmod 777 /etc/ssh/ssh_config")
+		#run ("sudo chmod 777 /etc/ssh/ssh_config")
 		append("/etc/ssh/ssh_config","StrictHostKeyChecking no", use_sudo=True)
 		#run ("sudo echo \"StrictHostKeyChecking no\" >> /etc/ssh/ssh_config")
 		#for ips in list_ip:
@@ -73,39 +72,46 @@ def launch_john():
 	         key_text = f.read()
 	put("hash", '/var/mpishare/hash')
 	#put("cain.txt", '/var/mpishare/cain.txt')
-        cmd = "time mpiexec   -hostfile /var/mpishare/mpi-nodes.txt john-1.8.0-jumbo-1/run/john /var/mpishare/hash --pot=/var/mpishare/shared.pot --wordlist=john-1.8.0-jumbo-1/run/password.lst --rules=All "
+        cmd = "time mpiexec   -hostfile /var/mpishare/mpi-nodes.txt JohnTheRipper/run/john /var/mpishare/hash --pot=/var/mpishare/shared.pot --wordlist=JohnTheRipper/run/password.lst --rules=All "
         if len(sys.argv) > 1:
             cmd = cmd + sys.argv[1]
 	run (cmd)
+	run("JohnTheRipper/run/john /var/mpishare/hash --pot=/var/mpishare/shared.pot --show")
 
 
 def nfs_master():
 	with hide('output'):
-		run ("sudo apt-get install  nfs-kernel-server portmap -y") 
+		run ("sudo apt-get install  nfs-kernel-server portmap git -y") 
 		run ("sudo chmod 777 /etc/exports")
 		append("/etc/exports", "/var/mpishare	  *(rw,sync)",use_sudo=True)
 		#run ("sudo echo \"/var/mpishare	  *(rw,sync)\" > /etc/exports")
 		env.warn_only = True
 		run ("sudo service rpcbind  restart")
 		run ("sudo service nfs-kernel-server restart")
-		run("rm /var/mpishare/mpi-nodes.txt")
 		env.warn_only = False
 		#run ("sudo exportfs -a ")
 		run ("sudo chmod 777 /var/mpishare/")
 		#run ("echo `ip a | grep global | awk '{print $2}' | awk -F\"/\" '{print $1}'` slots=`nproc` > /var/mpishare/mpi-nodes.txt")
+		if exists("/var/mpishare/mpi-nodes.txt"):
+			run("rm /var/mpishare/mpi-nodes.txt")
 		append("/var/mpishare/mpi-nodes.txt", node_list)
-		if not exists("/var/mpishare/john-1.8.0-jumbo-1.tar.gz"):
-			run ("wget http://www.openwall.com/john/j/john-1.8.0-jumbo-1.tar.gz -O /var/mpishare/john-1.8.0-jumbo-1.tar.gz")
-	
+		if not exists("/var/mpishare/JohnTheRipper"):
+			#run ("wget http://www.openwall.com/john/j/john-1.8.0-jumbo-1.tar.gz -O /var/mpishare/john-1.8.0-jumbo-1.tar.gz")
+			run ("git clone https://github.com/magnumripper/JohnTheRipper.git")
+			run ("mv JohnTheRipper /var/mpishare/")
+
 
 
 def build_john():
 	with hide('output'):
-		if not exists("john-1.8.0-jumbo-1/run/john"):
-			run ("sudo cp /var/mpishare/john-1.8.0-jumbo-1.tar.gz .")
-			run ("tar xzvf john-1.8.0-jumbo-1.tar.gz")
-			run ("cd john-1.8.0-jumbo-1/src/ ; ./configure --enable-mpi")
-			run ("cd john-1.8.0-jumbo-1/src/ ; make clean && make -s")
+		if not exists("JohnTheRipper/run/john"):
+			run ("sudo cp -R /var/mpishare/JohnTheRipper/ .")
+			run("sudo chmod -R 777 JohnTheRipper")
+			#run ("tar xzvf john-1.8.0-jumbo-1.tar.gz")
+			run ("cd JohnTheRipper/src/ ; ./configure --enable-mpi")
+			run ("cd JohnTheRipper/src/ ; make clean && make -s")
+		else:
+			print ("john build detected, skipping compilling")
 
 
 
@@ -151,20 +157,22 @@ if not ra.get_consumer_key():
 acc = ra.account.get()
 print('\nHi %s,' % acc.first_name)
 
+
 # Get the list of raning instances
 choice = 'n'
 instances = ra.instances.list()
 print('\nYou have %d instance(s) runing' % len(instances))
 for i in instances:
-    print('\t- [%s] %s (%s, %s)' % (i.region.name, i.name, i.ip, i.image.name))
+    print('\t- [%s] %s (%s, %s) with %s vcpus' % (i.region.name, i.name, i.ip, i.image.name, i.flavor.vcpus))
     if choice.lower() == 'a':
     	if "master" in i.name and  ips_master == "":
     		print ('MASTER FOUND !')
     		ips_master = i.ip
     	else:
 	    	list_ip.append(i.ip)
-	    	list_con.append("admin@"+i.ip)
-    	node_list = node_list + i.ip + " slots=" + "6" + "\n"
+	    	list_con.append("admin@"+i.ip) 	
+    	node_list = node_list + i.ip + " slots=%i \n" % i.flavor.vcpus
+    	print (node_list)
 
     else:
     	choice = raw_input('\nWould you like to use it in the cluster ? : (a/y/N)')
@@ -175,7 +183,8 @@ for i in instances:
     		else:
 		    	list_ip.append(i.ip)
 		    	list_con.append("admin@"+i.ip)
-    		node_list = node_list + i.ip + " slots=" + "6" + "\n" 
+		   	node_list = node_list + i.ip + " slots=%i \n" % i.flavor.vcpus
+    		print (node_list)
 
 
 
@@ -198,53 +207,39 @@ if ra.ssh_keys.list_by_region(region):
         #image = pick_in_list('Image', ra.images.list_by_region(region))
         #flavor = pick_in_list('Flavor', ra.flavors.list_by_region(region))
         #ssh_key = pick_in_list('SSH key', ra.ssh_keys.list_by_region(region))
-	        image = ra.images.list_by_region(region)[14] #10) Ubuntu 14.04 Power 8 (a dynamiser)
-	        flavor = ra.flavors.list_by_region(region)[3] #5) ra.p8.2xl
-	        ssh_key = ra.ssh_keys.list_by_region(region)[2] # faire un grep from config
-	        if  ips_master == "":
-	        	instance_name = "master"
-	        	print ('MASTER CREATED !')
-	        else:
-	        	instance_name = "node" + str(i)
-	    
-	        instance = ra.instances.create(region, instance_name,
-	                                        flavor, image, ssh_key)
-	        print('\nInstance created')
-	        #parallel ? via instance+i =ra.. puis ACTIVE en cascade
-	        print('Waiting for instance to be ready...')
-	        
-	        while not instance.status == 'ACTIVE':
-	            time.sleep(10)
-	            instance = ra.instances.get_by_id(instance.id)
-	        #a rendre dynamique via un GET /flavor vcpu
-	        node_list = node_list + instance.ip + " slots=" + "6" + "\n" 
-	        if "master" in instance_name:
-	        	ips_master = instance.ip
-	        else:
-	        	list_con.append("admin@"+instance.ip)
-	        	list_ip.append(instance.ip)
-	        print('Instance launched')
-	        print('\t-  IP: %s' % instance.ip)
-	        print('\t- VNC: %s' % instance.vnc)
-	        print('\t- SSH: ssh admin@%s' % instance.ip)
-	        #enregistrement des ip dans un array
+        image = ra.images.list_by_region(region)[14] #10) Ubuntu 14.04 Power 8 (a dynamiser)
+        flavor = ra.flavors.list_by_region(region)[3] #5) ra.p8.2xl
+        ssh_key = ra.ssh_keys.list_by_region(region)[2] # faire un grep from config
+        if  ips_master == "":
+        	instance_name = "master"
+        	ips_master = 'reserved'
+        	print ('MASTER CREATED !')
+        else:
+        	instance_name = "node" + str(i)
+        instance_list.append(ra.instances.create(region, instance_name, flavor, image, ssh_key))
+        print('\nInstance resquested') 
+
+
+    print('Waiting for instance to be ready...')
+    for i in range(0,int(choice)):
+	    while not instance_list[i].status == 'ACTIVE':
+	        time.sleep(3)
+	        print ("waiting for %s (%s) is still in %s state...." % (instance_list[i].name,instance_list[i].id,instance_list[i].status))
+	        instance_list[i] = ra.instances.get_by_id(instance_list[i].id)
+	    #a rendre dynamique via un GET /flavor vcpu
+	    #node_list = node_list + instance_list[i].ip + " slots=" + instance_list[i].flavor.vcpus + "\n"
+	    node_list = node_list + instance_list[i].ip + " slots=%i \n" % instance_list[i].flavor.vcpus
+	    print (node_list)
+	    if "master" in instance_list[i].name:
+	    	ips_master = instance_list[i].ip
+	    else:
+	    	list_con.append("admin@"+instance_list[i].ip)
+	    	list_ip.append(instance_list[i].ip)
+	    print('Instance launched')
+	    print('\t-  IP: %s' % instance_list[i].ip)
+	    print('\t- SSH: ssh admin@%s' % instance_list[i].ip)
 			
-#virgule = ""
-#line_host = ""
-#for ips in list_ip:
-#	print ('install john and mpi on node %s' % ips)
-#	line_host = line_host + virgule + "admin@" + ips 
-#	virgule = ","
-	#execute(install_john, hosts=["admin@" + ips])
 
-#print ('executing on %s' % line_host)
-#execute(install_john, hosts=list_con)
-
-
-#launch john on master . on essaye de retrouver le precedent master
-#if not ips_master:
-#	ips_master = list_ip[0]
-#	list_con.pop(0)
 print ('ips master = ' + ips_master + '-')
 execute(install_pre,hosts=list_con)
 execute(install_pre,hosts=["admin@" + ips_master])
@@ -253,12 +248,12 @@ execute(nfs_node, hosts=list_con)
 execute(build_john,hosts=list_con)
 execute(build_john,hosts=["admin@" + ips_master])
 execute(launch_john, hosts=["admin@" + ips_master])
-print ("your result on ssh "+ "admin@" + ips_master + " john-1.8.0-jumbo-1/run/john /var/mpishare/hash --pot=/var/mpishare/shared.pot --show")		
+print ("your result on ssh "+ "admin@" + ips_master + " JohnTheRipper/run/john /var/mpishare/hash --pot=/var/mpishare/shared.pot --show")		
 
 
-
-	        #choice = raw_input('\nWould you like to delete the instance? (y/N): ')
-	        #if choice.lower() == 'y':
-	        #    instance.delete()
-	        #    print('Instance deleted')
+choice1 = raw_input('\nWould you like to delete all your cluster instances? (y/N): ')
+if choice1.lower() == 'y':
+	for i in range(0,int(choice)):
+		instance_list[i].delete()
+    	print('Instance %s deleted', instance_list[i].name)
 
