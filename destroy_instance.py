@@ -15,29 +15,41 @@ parser.read('settings.conf')
 #env.key_filename = parser.get('ra','ssh_key_filename')
 application_key = parser.get('ra', 'application_key')
 application_secret = parser.get('ra','application_secret')
-consumer_key = parser.get('ra','consumer_key')
 
 
-# Create the Runabove SDK interface
-ra = Runabove(application_key,
-               application_secret,
-               consumer_key=consumer_key)
 
-# Check if the user has a Consumer Key
-if not ra.get_consumer_key():
-    print('\nEach user using your application needs a Consumer Key.')
-    choice = raw_input('\nWould you like to get one? (y/N): ')
-    if choice.lower() != 'y':
-        print('Not requesting a Consumer Key, aborting')
-        sys.exit(0)
-    else:
-        print('\nYou can get it here %s' % ra.get_login_url())
-        raw_input('\nWhen you are logged, press Enter ')
-        print('Your consumer key is: %s' % ra.get_consumer_key())
+
 
 # Get information about the account
-acc = ra.account.get()
-print('\nHi %s,' % acc.first_name)
+while True:
+    try :
+        consumer_key = parser.get('ra','consumer_key')
+        # Create the Runabove SDK interface
+        ra = Runabove(application_key,
+               application_secret,
+               consumer_key=consumer_key)
+        acc = ra.account.get()
+        print('\nHi %s,' % acc.first_name)
+        break
+    except:
+        print('\nLogin failed.')
+        choice = raw_input('\nWould you like to get a new consumer key? (n/Y): ')
+        if choice.lower() == 'n':
+            print('Not requesting a Consumer Key, aborting')
+            sys.exit(0)
+        else:
+            print('\nYou need to login on this site %s' % ra.get_login_url())
+            raw_input('\nWhen you are logged, press Enter ')
+            #print('Your consumer key is: %s' % ra.get_consumer_key())
+            parser.set('ra', 'consumer_key', ra.get_consumer_key())
+            # Writing our configuration file
+            with open('settings.conf', 'wb') as configfile:
+                parser.write(configfile)
+
+
+
+
+
 
 # Get the list of raning instances
 choice = 'n'

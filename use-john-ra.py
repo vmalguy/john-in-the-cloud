@@ -40,12 +40,12 @@ def install_pre():
 		with hide('everything'):
 			#copy de la clef  pour que tous les host se parle entre eu
 			with open(os.path.expanduser(env.key_filename)) as f:
-		         key_text = f.read()
-		    #bug : on devrait overight pas append
+				key_text = f.read()
+			#bug : on devrait overight pas append
 			append('~/.ssh/id_rsa', key_text)
 			with open(os.path.expanduser(env.key_filename + '.pub')) as f:
-		         key_text = f.read()
-		    #bug : on devrait overight pas append
+				key_text = f.read()
+			#bug : on devrait overight pas append
 			append('~/.ssh/id_rsa.pub', key_text)
 		with hide('output'):
 			run ("chmod 0600 ~/.ssh/*")
@@ -61,13 +61,13 @@ def install_pre():
 
 def launch_john():
 	with open(os.path.expanduser(parser.get('ra','hashfile'))) as f:
-	        key_text = f.read()
-		put("hash", '/var/mpishare/hash')
-		cmd = "time mpiexec   -hostfile /var/mpishare/mpi-nodes.txt JohnTheRipper/run/john /var/mpishare/hash --pot=/var/mpishare/shared.pot --wordlist=JohnTheRipper/run/password.lst --rules=All "
-		if len(sys.argv) > 1:
-			cmd = cmd + sys.argv[1]
-		run (cmd)
-		run("JohnTheRipper/run/john /var/mpishare/hash --pot=/var/mpishare/shared.pot --show")
+			key_text = f.read()
+			put("hash", '/var/mpishare/hash')
+			cmd = "time mpiexec   -hostfile /var/mpishare/mpi-nodes.txt JohnTheRipper/run/john /var/mpishare/hash --pot=/var/mpishare/shared.pot --wordlist=JohnTheRipper/run/password.lst --rules=All "
+			if len(sys.argv) > 1:
+				cmd = cmd + sys.argv[1]
+			run (cmd)
+			run("JohnTheRipper/run/john /var/mpishare/hash --pot=/var/mpishare/shared.pot --show")
 
 
 def nfs_master():
@@ -106,58 +106,62 @@ def build_john():
 
 
 def nfs_node():
-	env.warn_only = True
-	run ("sudo mount %s:/var/mpishare /var/mpishare" % (ips_master))
-	env.warn_only = False
-	#run ("echo `ip a | grep global | awk '{print $2}' | awk -F\"/\" '{print $1}'` slots=`nproc`>> /var/mpishare/mpi-nodes.txt")
-	
+	if not exists("/var/mpishare/JohnTheRipper"):
+		env.warn_only = True
+		env.parallel = False
+		#use -F to fork mount in paralelle ? bad idea ... i prefer to sequentialy mount nfs to avoid issues
+		run ("sudo mount %s:/var/mpishare /var/mpishare" % (ips_master))
+		env.warn_only = False
+		env.parallel = True
+		#run ("echo `ip a | grep global | awk '{print $2}' | awk -F\"/\" '{print $1}'` slots=`nproc`>> /var/mpishare/mpi-nodes.txt")
+		
 def pick_in_list(list_name, obj_list):
-    """Generic function to ask the user to choose from a list."""
-    print('\n%ss available' % list_name)
-    for num, i in enumerate(obj_list):
-        print('\t%d) %s' % (num+1, i.name))
-    try:
-        selected_num = raw_input('\nPlease select a %s number [1]: ' %
-                                 list_name.lower())
-        selected_num = int(selected_num) - 1
-        selected = obj_list[selected_num]
-    except (ValueError, IndexError):
-        selected = obj_list[0]
-    print('Using %s %s.' % (list_name.lower(), selected.name))
-    return selected
+	"""Generic function to ask the user to choose from a list."""
+	print('\n%ss available' % list_name)
+	for num, i in enumerate(obj_list):
+		print('\t%d) %s' % (num+1, i.name))
+	try:
+		selected_num = raw_input('\nPlease select a %s number [1]: ' %
+								 list_name.lower())
+		selected_num = int(selected_num) - 1
+		selected = obj_list[selected_num]
+	except (ValueError, IndexError):
+		selected = obj_list[0]
+	print('Using %s %s.' % (list_name.lower(), selected.name))
+	return selected
 
 def find_in_list(list_name, obj_list):
-    for num, i in enumerate(obj_list):
-        #print('\t%d) %s against %s' % (num+1, i.name, parser.get('ra', list_name)))
-    	if i.name == parser.get('ra', list_name):
-    		#print('selecting : %s' % i.name)
-    		return i
+	for num, i in enumerate(obj_list):
+		#print('\t%d) %s against %s' % (num+1, i.name, parser.get('ra', list_name)))
+		if i.name == parser.get('ra', list_name):
+			#print('selecting : %s' % i.name)
+			return i
 
 # Get information about the account
 while True:
-    try :
-        consumer_key = parser.get('ra','consumer_key')
-        # Create the Runabove SDK interface
-        ra = Runabove(application_key,
-               application_secret,
-               consumer_key=consumer_key)
-        acc = ra.account.get()
-        print('\nHi %s,' % acc.first_name)
-        break
-    except:
-        print('\nLogin failed.')
-        choice = raw_input('\nWould you like to get a new consumer key? (n/Y): ')
-        if choice.lower() == 'n':
-            print('Not requesting a Consumer Key, aborting')
-            sys.exit(0)
-        else:
-            print('\nYou need to login on this site %s' % ra.get_login_url())
-            raw_input('\nWhen you are logged, press Enter ')
-            #print('Your consumer key is: %s' % ra.get_consumer_key())
-            parser.set('ra', 'consumer_key', ra.get_consumer_key())
-            # Writing our configuration file
-            with open('settings.conf', 'wb') as configfile:
-                parser.write(configfile)
+	try :
+		consumer_key = parser.get('ra','consumer_key')
+		# Create the Runabove SDK interface
+		ra = Runabove(application_key,
+				application_secret,
+				consumer_key=consumer_key)
+		acc = ra.account.get()
+		print('\nHi %s,' % acc.first_name)
+		break
+	except:
+		print('\nLogin failed.')
+		choice = raw_input('\nWould you like to get a new consumer key? (n/Y): ')
+		if choice.lower() == 'n':
+			print('Not requesting a Consumer Key, aborting')
+			sys.exit(0)
+		else:
+			print('\nYou need to login on this site %s' % ra.get_login_url())
+			raw_input('\nWhen you are logged, press Enter ')
+			#print('Your consumer key is: %s' % ra.get_consumer_key())
+			parser.set('ra', 'consumer_key', ra.get_consumer_key())
+			# Writing our configuration file
+			with open('settings.conf', 'wb') as configfile:
+				parser.write(configfile)
 
 
 # Get the list of raning instances
@@ -165,78 +169,81 @@ choice = 'n'
 instances = ra.instances.list()
 print('\nYou have %d instance(s) runing' % len(instances))
 for i in instances:
-    print('\t- [%s] %s (%s, %s) with %s vcpus' % (i.region.name, i.name, i.ip, i.image.name, i.flavor.vcpus))
-    if choice.lower() == 'a':
-    	if "master" in i.name and  ips_master == "":
-    		print ('MASTER FOUND !')
-    		ips_master = i.ip
-    	else:
-	    	list_ip.append(i.ip)
-	    	list_con.append("admin@"+i.ip) 	
-    	node_list = node_list + i.ip + " slots=%i \n" % i.flavor.vcpus
-    	#print (node_list)
+	print('\t- [%s] %s (%s, %s) with %s vcpus' % (i.region.name, i.name, i.ip, i.image.name, i.flavor.vcpus))
+	if choice.lower() == 'a':
+		if "master" in i.name and  ips_master == "":
+			print ('MASTER FOUND !')
+			ips_master = i.ip
+		else:
+			list_ip.append(i.ip)
+			list_con.append("admin@"+i.ip) 	
+		node_list = node_list + i.ip + " slots=%i \n" % i.flavor.vcpus
+		#print (node_list)
 
-    else:
-    	choice = raw_input('\nWould you like to use it in the cluster ? : (a/y/N)')
-    	if choice.lower() == 'y' or choice.lower() == 'a':
-    		if "master" in i.name and  ips_master == "":
-    			ips_master = i.ip
-    			print ('MASTER FOUND !')
-    		else:
-		    	list_ip.append(i.ip)
-		    	list_con.append("admin@"+i.ip)
-		   	node_list = node_list + i.ip + " slots=%i \n" % i.flavor.vcpus
-    		#print (node_list)
+	else:
+		choice = raw_input('\nWould you like to use it in the cluster ? : (a/y/N)')
+		if choice.lower() == 'y' or choice.lower() == 'a':
+			if "master" in i.name and  ips_master == "":
+				ips_master = i.ip
+				print ('MASTER FOUND !')
+			else:
+				list_ip.append(i.ip)
+				list_con.append("admin@"+i.ip)
+			node_list = node_list + i.ip + " slots=%i \n" % i.flavor.vcpus
+			#print (node_list)
 
 region = find_in_list('Region', ra.regions.list())
 
-
 if ra.ssh_keys.list_by_region(region):
-    choice = raw_input('\nHow many instances would you like to create  in %s? : ' % region.name)
-    for i in range(0,int(choice)):
-    	flavor = find_in_list('Flavor', ra.flavors.list_by_region(region))
-        image = find_in_list('Image', ra.images.list_by_region(region))
-        print ("requesting a %s with %s OS" % (flavor.name,image.name))
-        if  ips_master == "":
-        	instance_name = "master"
-        	ips_master = 'reserved'
-        	print ('MASTER CREATED !')
-        else:
-        	instance_name = "node" + str(i)
-        #ssh_key = ra.ssh_keys.list_by_region(region)[2]
-        for j,s in enumerate(ra.ssh_keys.list_by_region(region)):
-			if s.name in parser.get('ra','ssh_key_name'):
-				ssh_key = ra.ssh_keys.list_by_region(region)[j]
-        instance_list.append(ra.instances.create(region, instance_name, flavor, image, ssh_key))
-        print('\nInstance resquested') 
+	choice = raw_input('\nHow many instances would you like to create  in %s? : ' % region.name) or 0
+	for i in range(0,int(choice)):
+		image = find_in_list('Image', ra.images.list_by_region(region))
+		if  ips_master == "":
+			instance_name = "master"
+			ips_master = 'reserved'
+			flavor = find_in_list('flavor_master', ra.flavors.list_by_region(region))
+			print ('MASTER CREATED !')
+		else:
+			instance_name = "node" + str(i)
+			flavor = find_in_list('Flavor', ra.flavors.list_by_region(region))
+		ssh_key = find_in_list('ssh_key_name',ra.ssh_keys.list_by_region(region))
+		#for j,s in enumerate(ra.ssh_keys.list_by_region(region)):
+		#	if s.name in parser.get('ra','ssh_key_name'):
+		#		ssh_key = ra.ssh_keys.list_by_region(region)[j]
+		print ("requesting a %s with %s OS" % (flavor.name,image.name), end="")
+		instance_list.append(ra.instances.create(region, instance_name, flavor, image, ssh_key))
+		print('\nInstance resquested') 
 
 
-    print('Waiting for instance to be ready...')
-    for i in range(0,int(choice)):
-	    while  instance_list[i].status == 'BUILD':
-	        print ("waiting for %s (%s) is still in %s state...." % (instance_list[i].name,instance_list[i].id,instance_list[i].status))
-	        time.sleep(2)
-	        instance_list[i] = ra.instances.get_by_id(instance_list[i].id)
-	       	
+	print('Waiting for instances to be ready...')
+	for i in range(0,int(choice)):
+		instance_list[i] = ra.instances.get_by_id(instance_list[i].id)
+		print("%s (%s) is " % (instance_list[i].name,instance_list[i].id), end="")
+		while  instance_list[i].status == 'BUILD':
+			print ('.BUILDING.', end="")
+			sys.stdout.flush()
+			time.sleep(2)
+			instance_list[i] = ra.instances.get_by_id(instance_list[i].id)
+			
+		if instance_list[i].status == 'ACTIVE' and instance_list[i].ip:
+			print(".ACTIVE... adding to resource pool !")
+			node_list = node_list + instance_list[i].ip + " slots=%i \n" % instance_list[i].flavor.vcpus
+			#print (node_list)
+			if "master" in instance_list[i].name:
+				ips_master = instance_list[i].ip
+			else :
+				list_con.append("admin@"+instance_list[i].ip)
+				list_ip.append(instance_list[i].ip)
 
-	    if instance_list[i].status == 'ACTIVE' and instance_list[i].ip:
-		    node_list = node_list + instance_list[i].ip + " slots=%i \n" % instance_list[i].flavor.vcpus
-		    #print (node_list)
-		    
-		    if "master" in instance_list[i].name:
-		    	ips_master = instance_list[i].ip
-		    else:
-	    		list_con.append("admin@"+instance_list[i].ip)
-	    		list_ip.append(instance_list[i].ip)
-	    	#print('Instance launched')
-	    	#print('\t-  IP: %s' % instance_list[i].ip)
-	    	#print('\t- SSH: ssh admin@%s' % instance_list[i].ip)
-	    else:
-		  	print ("OOPS, This one seems broken ... ")
-		  	instance_list[i].delete()
-		  	print ("deleted. requesting a brand new one insted !")
-		  	choice = choice + 1
-	        
+			#print('Instance launched')
+			#print('\t-  IP: %s' % instance_list[i].ip)
+			#print('\t- SSH: ssh admin@%s' % instance_list[i].ip)
+		else:
+			print ("OOPS, This one seems broken : status = %s , ip = %s " % (instance_list[i].status,instance_list[i].ip), end="")
+			instance_list[i].delete()
+			print ("deleted. requesting a brand new one insted !")
+			i = i + 1
+			
 			
 
 print ('ips master = ' + ips_master + '-')
@@ -254,7 +261,10 @@ print ("your result on ssh -i "+ parser.get('ra','ssh_key_filename') + " admin@"
 
 choice1 = raw_input('\nWould you like to delete all your cluster instances? (y/N):')
 if choice1.lower() == 'y':
-	for i in range(0,int(choice)):
-		instance_list[i].delete()
-    	print('Instance %s deleted', instance_list[i].name)
+	instances = ra.instances.list()
+	for i in instances:
+		print('\t- [%s] %s (%s, %s)' % (i.region.name, i.name, i.ip, i.image.name), end="")
+		instance = ra.instances.get_by_id(i.id)
+		instance.delete()
+		print(' : Instance deleted')
 
